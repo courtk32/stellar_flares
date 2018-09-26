@@ -2,7 +2,7 @@ import numpy as np
 import pandas as pd
 
 
-def FINDflare(flux, error, N1=3, N2=1, N3=3,
+def FINDflare(mag, error, N1=3, N2=1, N3=3,
               avg_std=False, std_window=7,
               returnbinary=False, debug=False):
     '''
@@ -10,17 +10,13 @@ def FINDflare(flux, error, N1=3, N2=1, N3=3,
     S. W. Chang et al. (2015), Eqn. 3a-d
     http://arxiv.org/abs/1510.01005
 
-    Note: these equations originally in magnitude units, i.e. smaller
-    values are increases in brightness. The signs have been changed, but
-    coefficients have not been adjusted to change from log(flux) to flux.
-
     Note: this algorithm originally ran over sections without "changes" as
     defined by Change Point Analysis. May have serious problems for data
     with dramatic starspot activity. If possible, remove starspot first!
 
     Parameters
     ----------
-    flux : numpy array
+    mag : numpy array
         data to search over
     error : numpy array
         errors corresponding to data.
@@ -47,23 +43,23 @@ def FINDflare(flux, error, N1=3, N2=1, N3=3,
         (Not part of original algorithm)
     '''
 
-    med_i = np.nanmedian(flux)
+    med_i = np.nanmedian(mag)
 
     if debug is True:
         print("DEBUG: med_i = " + str(med_i))
 
     if avg_std is False:
-        sig_i = np.nanstd(flux) # just the stddev of the window
+        sig_i = np.nanstd(mag) # just the stddev of the window
     else:
         # take the average of the rolling stddev in the window.
         # better for windows w/ significant starspots being removed
-        sig_i = np.nanmedian(pd.Series(flux).rolling(std_window, center=True).std())
+        sig_i = np.nanmedian(pd.Series(mag).rolling(std_window, center=True).std())
     if debug is True:
         print("DEBUG: sig_i = " + str(sig_i))
 
-    ca = flux - med_i
-    cb = np.abs(flux - med_i) / sig_i
-    cc = np.abs(flux - med_i - error) / sig_i
+    ca = mag - med_i
+    cb = np.abs(mag - med_i) / sig_i
+    cc = np.abs(mag - med_i - error) / sig_i
 
     if debug is True:
         print("DEBUG: ")
@@ -72,16 +68,16 @@ def FINDflare(flux, error, N1=3, N2=1, N3=3,
         print(sum(cc>N2))
 
     # pass cuts from Eqns 3a,b,c
-    ctmp = np.where((ca > 0) & (cb > N1) & (cc > N2))
+    ctmp = np.where((ca < 0) & (cb > N1) & (cc > N2))
 
-    cindx = np.zeros_like(flux)
+    cindx = np.zeros_like(mag)
     cindx[ctmp] = 1
 
     # Need to find cumulative number of points that pass "ctmp"
     # Count in reverse!
-    ConM = np.zeros_like(flux)
+    ConM = np.zeros_like(mag)
     # this requires a full pass thru the data -> bottleneck
-    for k in range(2, len(flux)):
+    for k in range(2, len(mag)):
         ConM[-k] = cindx[-k] * (ConM[-(k-1)] + cindx[-k])
 
     # these only defined between dl[i] and dr[i]
@@ -98,7 +94,7 @@ def FINDflare(flux, error, N1=3, N2=1, N3=3,
     if returnbinary is False:
         return istart_i, istop_i
     else:
-        bin_out = np.zeros_like(flux, dtype='int')
+        bin_out = np.zeros_like(mag, dtype='int')
         for k in range(len(istart_i)):
             bin_out[istart_i[k]:istop_i[k]+1] = 1
         return bin_out
