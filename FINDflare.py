@@ -63,7 +63,7 @@ def FINDflare(mag, error, N1=3, N2=1, N3=3,
 
     if debug is True:
         print("DEBUG: ")
-        print(sum(ca>0))
+        print(sum(ca<0))
         print(sum(cb>N1))
         print(sum(cc>N2))
 
@@ -88,11 +88,11 @@ def FINDflare(mag, error, N1=3, N2=1, N3=3,
     # use the value of ConM to determine how many points away stop is
     istop_i = istart_i + (ConM[istart_i] - 1)
 
-    istart_i = np.array(istart_i, dtype='int')
-    istop_i = np.array(istop_i, dtype='int')
+    istart_i = np.array(istart_i)#, dtype='int')
+    istop_i = np.array(istop_i)#, dtype='int')
 
     if returnbinary is False:
-        return istart_i, istop_i
+        return np.array([istart_i, istop_i])
     else:
         bin_out = np.zeros_like(mag, dtype='int')
         for k in range(len(istart_i)):
