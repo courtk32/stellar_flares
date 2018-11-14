@@ -88,13 +88,13 @@ def FINDflare(mag, error, N1=3, N2=1, N3=3,
     # use the value of ConM to determine how many points away stop is
     istop_i = istart_i + (ConM[istart_i] - 1)
 
-    istart_i = np.array(istart_i)#, dtype='int')
-    istop_i = np.array(istop_i)#, dtype='int')
+    istart_i = np.array(istart_i, dtype=np.int)
+    istop_i = np.array(istop_i, dtype=np.int)
 
     if returnbinary is False:
         return np.array([istart_i, istop_i])
     else:
-        bin_out = np.zeros_like(mag, dtype='int')
+        bin_out = np.zeros_like(mag, dtype=np.int)
         for k in range(len(istart_i)):
             bin_out[istart_i[k]:istop_i[k]+1] = 1
         return bin_out
