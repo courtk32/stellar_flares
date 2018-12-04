@@ -158,14 +158,14 @@ def rundata(matchfile, outdur):
         findflare(matchfile, outdur, i, t, "transients")
 
 
-'''
-def runbatch(mfile='592.txt', nrun=0, outdur):
+
+def runbatch(mfile='592.txt', nrun=0, outdur=''):
     files = csv.reader(mfile)
     if nrun == 0:
         nrun = len(files)
     for i in range(nrun):
         rundata(files[i], outdur)
-'''
+
 #create a csv for each match file
 #4:05 - 4:24
 
@@ -174,3 +174,5 @@ if __name__ == "__main__":
     out = 'flares_found_full'
     rundata(fl, out)
     print('finished')
+
+     
