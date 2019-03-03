@@ -1,0 +1,5 @@
+,match_file,id,type,mintime,maxtime,ra,dec,equivdur,plot_name,labels
+0,ztf_000436_zr_c16_q2_match_programid2.pytable,39605,sources,58348.3009144,58348.303206,281.5623614,0.36679409999999996,1071.373791658059,found_flares_436/ztf_000436_zr_c16_q2_match_programid2_id_39605_type_sources.png,1
+1,ztf_000436_zr_c16_q2_match_programid2.pytable,58886,sources,58348.2310532,58348.2328819,281.2834566,0.7251771,101.92651977796714,found_flares_436/ztf_000436_zr_c16_q2_match_programid2_id_58886_type_sources.png,2
+2,ztf_000436_zr_c16_q2_match_programid2.pytable,127697,sources,58348.284375,58348.2862153,280.796001,0.7712614999999999,214.30945650333385,found_flares_436/ztf_000436_zr_c16_q2_match_programid2_id_127697_type_sources.png,1
+3,ztf_000436_zr_c16_q2_match_programid2.pytable,137450,sources,58348.3197454,58348.321585599995,281.2970383,0.5085653,91.24146548525844,found_flares_436/ztf_000436_zr_c16_q2_match_programid2_id_137450_type_sources.png,3
