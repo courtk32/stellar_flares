@@ -52,8 +52,8 @@ def plotflare(file, outdur, idf, lightcurve, typecurve, indx, show=True):
             linestyle="none", marker='o', markersize=4, c="red")
     ax.set_title(f'Light Curver for ID = {idf}')
     ax.set_ylabel('Magnitude', size=12)
+    ax.set_ylim(np.nanmax(lightcurve['mag'] + 0.2), np.nanmin(lightcurve['mag'] - 0.2))
     ax.set_xlabel('Date (MJD)', size=12)
-    ax.invert_yaxis()
     '''
     Gives a zoomed in view of the flare
     '''
@@ -63,8 +63,7 @@ def plotflare(file, outdur, idf, lightcurve, typecurve, indx, show=True):
     ax.plot(lightcurve['mjd'].values[indx], lightcurve['mag'].values[indx],
             linestyle="none", marker='o', markersize=4, c="red")
     ax.set_ylabel('Magnitude', size=12)
-#    ax.set_xlabel('Date (MJD)', size=12)
-    ax.invert_yaxis()
+    ax.set_ylim(np.nanmax(lightcurve['mag'] + 0.2), np.nanmin(lightcurve['mag'] - 0.2))
     dur = (np.nanmax(lightcurve['mjd'].values[indx]) -
            np.nanmin(lightcurve['mjd'].values[indx]))
     ax.set_xlim(np.nanmin(lightcurve['mjd'].values[indx]) - 3*dur,
@@ -100,13 +99,13 @@ def writedata(file, outdur, idf, lightcurve, typecurve, nflare, equivdur):
     if not os.path.isfile(outfilename):
         with open(outfilename, 'a') as csv_file:
             write = csv.writer(csv_file)
-            write.writerow(['match_file', 'id', 'type', 'date_of_flare_points',
+            write.writerow(['match_file', 'id', 'type', 'mintime', 'maxtime', 'ra',
                            'dec', 'equivdur'])
     
     with open(outfilename, 'a') as csv_file:
         write = csv.writer(csv_file)
         write.writerow([file.split('/')[-1], idf, typecurve,
-                        lightcurve['mjd'].values[nflare],
+                        np.nanmin(lightcurve['mjd'].values[nflare]), np.nanmax(lightcurve['mjd'].values[nflare]), 
                         lightcurve['ra'].values[0],
                         lightcurve['dec'].values[0],
                         equivdur])
@@ -133,13 +132,16 @@ def findflare(file, outdur, idf, lightcurve, typecurve, N1=3, N2=1, N3=3):
                                edges[j] + flare[1, i]+1, 1,
                                dtype=np.int)
             if len(nflare) > 0:
-                p = EquivDur(lightcurve['mjd'], lightcurve['psfflux'])
+                dur = (np.nanmax(lightcurve['mjd'].values[nflare]) - np.nanmin(lightcurve['mjd'].values[nflare]))
+                isflare = np.where((lightcurve['mjd'] >= np.nanmin(lightcurve['mjd'].values[nflare]) - 3*dur) &
+                                   (lightcurve['mjd'] <= np.nanmax(lightcurve['mjd'].values[nflare]) + 10*dur))[0]
+                p = EquivDur(lightcurve['mjd'].values[isflare], lightcurve['psfflux'].values[isflare] /
+                             np.nanmedian(lightcurve['psfflux']) - 1)
 #                write must come first because it creates the directory
                 writedata(file, outdur, idf, lightcurve, typecurve, nflare, p)
                 plotflare(file, outdur, idf, lightcurve, typecurve, nflare)
-            indx = np.append(indx, nflare)
-
-
+                indx = np.append(indx, nflare)            
+            
 def rundata(matchfile, outdur):
     sources, sourcedata, transients, transientdata = loaddata(matchfile)
     ids = sources.loc[(sources["bestmedianmag"] <= 21.5) &
@@ -158,19 +160,22 @@ def rundata(matchfile, outdur):
         findflare(matchfile, outdur, i, t, "transients")
 
 
-'''
-def runbatch(mfile='592.txt', nrun=0, outdur):
-    files = csv.reader(mfile)
+    
+def runbatch(mfile='592.txt', nrun=0, outdur=''):
+    batch = open(mfile, 'r')
+    files = batch.readlines()
     if nrun == 0:
         nrun = len(files)
     for i in range(nrun):
-        rundata(files[i], outdur)
-'''
+        rundata('/epyc/data/ztf_matchfiles' + files[i][1:-1], outdur)
+    
 #create a csv for each match file
 #4:05 - 4:24
 
-if __name__ == "__main__":
-    fl = '../ztf_000592_zr_c01_q1_match_programid2.pytable'
-    out = 'flares_found_full'
-    rundata(fl, out)
-    print('finished')
+#if __name__ == "__main__":
+#    fl = '../ztf_000592_zr_c01_q1_match_programid2.pytable'
+#    out = 'flares_found_full'
+#    rundata(fl, out)
+#    print('finished')
+
+     
