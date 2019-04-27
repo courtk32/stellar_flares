@@ -5,6 +5,7 @@ import numpy as np
 import csv
 import os
 import glob
+import tables as pt
 from IPython.display import Image, display
 import pandas as pd
 import matplotlib.pyplot as plt
@@ -32,7 +33,6 @@ def loaddata(matchfile):
     mtfl.close()
     return sources, sourcedata, transients, transientdata
 
-
 def findtransient(lightcurve, N1=3, N2=1, N3=3):
     '''
     Uses the Findflare function to identify spikes in brightness in ZTF lightcurves
@@ -55,30 +55,35 @@ def findtransient(lightcurve, N1=3, N2=1, N3=3):
     The indices of the times when the magnitude decrease/the source brightness increases
     '''
     dt = np.diff(lightcurve['mjd'])
-    #create boundary points to avoid evaluating large gaps as a continuous lightcurve
+    #index for boundary points of gaps in the lightcurve
     bpoint = np.where((dt > 0.1))[0] 
+    #shifts the boundary point from the beginning of gap to the end of gap
     bpoint += 1
-    edges = np.concatenate([[0], bpoint, [len(lightcurve)]])
-    indx = np.array([], dtype=np.int)
+    ''' check in about changing it to -1 '''
+    edges = np.concatenate([[0], bpoint, [len(lightcurve)-1]])
+    #create a dataframe to put in each set of indx and equivdur
+    df = pd.DataFrame(columns=['fl_indx','equivdur'])
     for j in range(len(edges) - 1):
         #searches for a transient in each section of the lightcurve
         trans = ff(lightcurve['mag'][edges[j]:edges[j+1]],
                    lightcurve['magerr'].values[edges[j]:edges[j+1]],
                    N1=N1, N2=N2, N3=N3)
+        #if no flare is found len = 0, otherwise is loops over nflares
         for i in range(len(trans[0, :])):
-            trans_indx = np.arange(edges[j] + trans[0, i],
+            #trans gives the index in the section, this converts to index in the total lightcurve 
+            ntrans_indx = np.arange(edges[j] + trans[0, i],
                                edges[j] + trans[1, i]+1, 1,
                                dtype=np.int)
             #if a transient is identified
-            if len(trans_indx) > 0:
-                dur = (np.nanmax(lightcurve['mjd'].values[trans_indx]) - np.nanmin(lightcurve['mjd'].values[trans_indx]))
-                isflare = np.where((lightcurve['mjd'] >= np.nanmin(lightcurve['mjd'].values[trans_indx]) - 3*dur) &
-                                   (lightcurve['mjd'] <= np.nanmax(lightcurve['mjd'].values[trans_indx]) + 15*dur))[0]
-                equivdur = matchflare.EquivDur(lightcurve['mjd'].values[isflare],
-                                               lightcurve['psfflux'].values[isflare] /np.nanmedian(lightcurve['psfflux']) - 1)
-                indx = np.append(indx, trans_indx)     
-    return indx, equivdur
-
+            if len(ntrans_indx) > 0:
+                dur = (np.nanmax(lightcurve['mjd'].values[ntrans_indx]) - np.nanmin(lightcurve['mjd'].values[ntrans_indx]))
+                isflare = np.where((lightcurve['mjd'] >= np.nanmin(lightcurve['mjd'].values[ntrans_indx]) - 3*dur) &
+                                   (lightcurve['mjd'] <= np.nanmax(lightcurve['mjd'].values[ntrans_indx]) + 15*dur))[0]
+                equiv = matchflare.EquivDur(lightcurve['mjd'].values[isflare],
+                                            lightcurve['psfflux'].values[isflare] /np.nanmedian(lightcurve['psfflux']) - 1)
+                df = df.append({'fl_indx':ntrans_indx, 'equivdur':equiv}, ignore_index=True)
+                
+    return df
 
 def parameters_guess(lightcurve, fl_indx):
     sigma = np.nanmax(lightcurve['mjd'].values[fl_indx]) - np.nanmin(lightcurve['mjd'].values[fl_indx])
@@ -119,8 +124,8 @@ def chisquared(mag, magerr, fitmag, para):
     '''
     chisquared = np.sum(((mag - fitmag) / magerr) ** 2)
     dof = len(mag) - len(para)
-    reduced = chisq / dof
-    return chisq, dof, reduced
+    reduced = chisquared / dof
+    return chisquared, dof, reduced
 
 
 def AIC(mag, magerr, fitmag, para):
@@ -139,27 +144,24 @@ def test_model(lightcurve, fl_indx):
     x_g,y_g,para_g,err_g = fit_gauss(lightcurve,fl_indx)
     AIC_f = AIC(y, err, y_f, para_f)
     AIC_g = AIC(y, err, y_g, para_g)        
-    chisq_f, dof_f, red_f = chisq(y, err, y_f, para_f)
-    chisq_g, dof_g, red_g = chisq(y, err, y_g, para_g)    
+    chisq_f, dof_f, red_f = chisquared(y, err, y_f, para_f)
+    chisq_g, dof_g, red_g = chisquared(y, err, y_g, para_g)    
     compare_exp =  np.exp((AIC_g - AIC_f) / 2)
     compare_per = (AIC_g - AIC_f) #/ np.absolute(AIC_f) * 100
     return AIC_f, chisq_f, dof_f, red_f, AIC_g, chisq_g, dof_g, red_g, compare_exp, compare_per
 
 
 def checkendflare(lightcurve,indx):
-    two_days = lightcurve.loc[lightcurve['mjd'] < lightcurve['mjd'].values[indx[0]] + .5]
     last_flare = lightcurve['mjd'].values[indx[-1]]
-    last_date = two_days['mjd'].values[-1]
+    last_date = lightcurve['mjd'].values[-1]
     return last_date - last_flare
 
 
-def plot_models(file, lightcurve, fl_indx, ids, residuals=False, stats=None, time=None, full_lc=False, save=False):
+def plot_models(file, lightcurve, fl_indx, ids, initout_csv, residuals=False, stats=None, time=None, full_lc=False, save=False):
     '''
     file: name of the 
     time: time between end of flare and end of light curve
     '''
-    #isflare = parameters_guess(lightcurve, fl_indx)[4]
-    #AIC_f, chisq_f, dof_f, red_ AIC_g, chisq_g, dof_g, compare_exp, compare_per= test_model(lightcurve, fl_indx)
     offset, amp, sigma, timepeak, isflare = parameters_guess(lightcurve, fl_indx)
     y = lightcurve['mag'].values[isflare]
     err = lightcurve['magerr'].values[isflare]
@@ -208,10 +210,11 @@ def plot_models(file, lightcurve, fl_indx, ids, residuals=False, stats=None, tim
         ax_full.invert_yaxis()
     plt.show()
     if save:
-        fig.savefig('found_flares_436/' + file.split('/')[-1][:-9] + '_id_' + str(ids) + '_stats.png')
+        fig.savefig(os.path.dirname(initout_csv) + '/' + file.split('/')[-1][:-9] +
+                    '_id_' + str(ids) + '_indx_' + str(fl_indx[0]) + '_stats.png')
     
     
-def writedata(file, ids, lightcurve, stats, indx):
+def writedata(file, initout_csv, ids, lightcurve, stats, trans_df, time_until_end):
     '''
     file: which match file
     idf: is the light curve is
@@ -219,36 +222,44 @@ def writedata(file, ids, lightcurve, stats, indx):
     equivdur: use EquivDur in findflare to save duration
     time: difference in mjd between flare and end of lightcurve
     '''
-    outfilename = file.split('/')[0] + '/stats_' + file.split('/')[1][:10] + '_final_3.csv'
+    indx = trans_df['fl_indx']
+    outfilename = os.path.dirname(initout_csv) + '/stats_' + file.split('/')[-1][:10] + '.csv'
     if not os.path.isfile(outfilename):
         with open(outfilename, 'a') as csv_file:
             write = csv.writer(csv_file)
             write.writerow(['match_file', 'id', 'aic_flare', 'chi_flare', 'dof_flare', 'red_flare',
-                            'aic_gauss', 'chi_gauss', 'dof_gauss', 'red_gauss', 'exp_comp', 'perc_comp', 
+                            'aic_gauss', 'chi_gauss', 'dof_gauss', 'red_gauss', 'exp_comp', 'perc_comp',
+                            'fl_indx', 'equivdur',
                             'ra', 'dec', 
                             'xpos', 'ypos', 
-                            'flare_time', 'end_time', 
-                            'flag_flare'])
+                            'flare_time', 'end_time',
+                            'flare_end_diff'])
     
     with open(outfilename, 'a') as csv_file:
         write = csv.writer(csv_file)
         write.writerow([file.split('/')[-1][:-9], ids, stats[0], stats[1], stats[2], stats[3],
                         stats[4], stats[5], stats[6], stats[7], stats[8], stats[9],
+                        indx,trans_df['equivdur'],
                         lightcurve['ra'].values[indx[0]], lightcurve['dec'].values[indx[0]], 
                         lightcurve['xpos'].values[indx[0]],lightcurve['ypos'].values[indx[0]],
                         lightcurve['mjd'].values[indx[0]],lightcurve['mjd'].values[-1],
-                        lightcurve['catflags'].values[indx]])
+                        time_until_end])
 
 
-def testlightcurve(lightcurve,ids, file):
-    indx = findtransient(lightcurve)
-    twomjd = lightcurve.loc[lightcurve['mjd'] < lightcurve['mjd'].values[0] + 5]
-    time_until_end = checkendflare(twomjd, indx)
-    stats = test_model(twomjd, indx)
-    writedata(file, ids, twomjd, stats, indx)
-    plot = plot_models(file, twomjd, indx, ids, residuals=True, 
-                       stats=stats, time=time_until_end, full_lc=True, save=True)
-    return plot
+def testlightcurve(lightcurve, ids, file, initout_csv):
+    trans_df = findtransient(lightcurve)
+    #repeat for each transient detected
+    for index, row in trans_df.iterrows():
+        
+        twomjd = lightcurve.loc[lightcurve['mjd'] < lightcurve['mjd'].values[0] + 5]
+        time_until_end = checkendflare(twomjd, row['fl_indx'])
+        stats = test_model(twomjd, row['fl_indx'])
+        writedata(file, initout_csv, ids, twomjd, stats, row, time_until_end)
+        plot_models(file, twomjd, row['fl_indx'], ids, initout_csv, residuals=True, 
+                    stats=stats, time=time_until_end, full_lc=True, save=True)
+        
+        return
+        
 
 
 def findmatchpath(path_csv, initout_csv, mypath='/epyc/data/ztf_matchfiles'):
@@ -261,7 +272,7 @@ def findmatchpath(path_csv, initout_csv, mypath='/epyc/data/ztf_matchfiles'):
         csv file that contains the paths to all of the matchfiles in a given
         field of view. The csv should contain 64 paths.
     initout_csv: str
-        the output csv file from matchflare.py produced from the matchfile
+        the output csv file from matchflare.py produced from the matchfile are placed
     mypath: str
         path from home directory to directory of the path listed in path_csv.
         If path listed path_csv goes from home directory then input ''.
@@ -310,12 +321,41 @@ def runmatch(matchfile, initout_csv):
     # run testlightcurve on lightcurves from sourcedata
     for index, row in match_sources.iterrows():
             lightcurve = sourcedata[sourcedata["matchid"] == match_sources['id'][index]]
-            testlightcurve(lightcurve, match_sources['id'][index], initout_csv)
+            try:
+                testlightcurve(lightcurve, match_sources['id'][index], matchfile, initout_csv)
+            except RuntimeError:
+                file = initout_csv.split('/')[-1]
+                file = file[0:37] 
+                outfilename = os.path.dirname(initout_csv) + '/error_' + file.split('/')[-1][:10] + '.csv'
+                if not os.path.isfile(outfilename):
+                    with open(outfilename, 'a') as csv_file:
+                        write = csv.writer(csv_file)
+                        write.writerow(['match_file', 'id'])
+                        write.writerow([file.split('/')[-1][:-9], lightcurve['matchid'].values[0]])
+
+                with open(outfilename, 'a') as csv_file:
+                    write = csv.writer(csv_file)
+                    write.writerow([file.split('/')[-1][:-9], lightcurve['matchid'].values[0]])
+    
     # run testlightcurve on lightcurves from transientdata
     for index, row in match_transients.iterrows():
             lightcurve = transientdata[transientdata["matchid"] == match_transients['id'][index]]
-            testlightcurve(lightcurve, match_transients['id'][index], initout_csv)
+            try:
+                testlightcurve(lightcurve, match_transients['id'][index], matchfile, initout_csv)
+            except RuntimeError:
+                file = initout_csv.split('/')[-1] #takes the file name, not the whole path 
+                file = file[0:37] 
+                outfilename = os.path.dirname(initout_csv) + '/error_' + file.split('/')[-1][:10] + '.csv'
+                if not os.path.isfile(outfilename):
+                    with open(outfilename, 'a') as csv_file:
+                        write = csv.writer(csv_file)
+                        write.writerow(['match_file', 'id'])
+                        write.writerow([file.split('/')[-1][:-9], lightcurve['matchid'].values[0]])
 
+                with open(outfilename, 'a') as csv_file:
+                    write = csv.writer(csv_file)
+                    write.writerow([file.split('/')[-1][:-9], lightcurve['matchid'].values[0]])
+            
 
 def runfield(path_csv, initout_dir):
     '''
@@ -344,13 +384,15 @@ def runfield(path_csv, initout_dir):
     '''
    
     # identifies all of the csv files in the input directory
-    initout_all = glob.glob(initout_dir + '/*full.csv')
+    initout_all = glob.glob(initout_dir + '/*.csv')
+
     for initout_csv in initout_all:
         matchfile = findmatchpath(path_csv, initout_csv)
+        print(matchfile)
         runmatch(matchfile, initout_csv)
 
 
-if __name__ == "__main__":
-    path_csv = sys.argv[1]
-    directory_to_matchcsv = sys.argv[2]
-    runfield(path_csv, directory_to_matchcsv)
+#if __name__ == "__main__":
+#    path_csv = sys.argv[1]
+#    directory_to_matchcsv = sys.argv[2]
+#    runfield(path_csv, directory_to_matchcsv)

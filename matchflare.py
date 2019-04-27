@@ -18,7 +18,6 @@ import os
 sns.set_style("whitegrid")
 sns.set_context("talk")
 
-
 def loaddata(matchfile):
     mtfl = pt.open_file(matchfile, 'r', root_uep='/', filters='lzo')
     sourcedata = pd.read_hdf(matchfile, key="matches/sourcedata")
@@ -33,6 +32,7 @@ def loaddata(matchfile):
     transients = pd.DataFrame.from_records(transientsObject.cols, columns=transients_columns_list)
     sourcedata.sort_values('mjd', inplace=True)
     transientdata.sort_values('mjd', inplace=True)
+    mtfl.close()
     return sources, sourcedata, transients, transientdata
 
 
@@ -70,6 +70,10 @@ def plotflare(file, outdur, idf, lightcurve, typecurve, indx, show=True):
                 np.nanmax(lightcurve['mjd'].values[indx]) + 10*dur)
     fig.savefig(outdur + '/' + file.split('/')[-1][:-8] + '_id_' + str(idf) +
                 '_type_' + str(typecurve) + '.png')
+    if show:
+        plt.show()
+    else:
+        plt.close()
 
 
 def EquivDur(time, flux):
@@ -139,7 +143,7 @@ def findflare(file, outdur, idf, lightcurve, typecurve, N1=3, N2=1, N3=3):
                              np.nanmedian(lightcurve['psfflux']) - 1)
 #                write must come first because it creates the directory
                 writedata(file, outdur, idf, lightcurve, typecurve, nflare, p)
-                plotflare(file, outdur, idf, lightcurve, typecurve, nflare)
+                plotflare(file, outdur, idf, lightcurve, typecurve, nflare, show=False)
                 indx = np.append(indx, nflare)            
             
 def rundata(matchfile, outdur):
@@ -166,8 +170,12 @@ def runbatch(mfile='592.txt', nrun=0, outdur=''):
     files = batch.readlines()
     if nrun == 0:
         nrun = len(files)
+        
+    print(mfile+': running '+str(nrun)+' matchfiles')
     for i in range(nrun):
-        rundata('/epyc/data/ztf_matchfiles' + files[i][1:-1], outdur)
+        outfilename = outdur + '/' + files[i][1:-1].split('/')[-1][:-8] + '.csv'
+        if not os.path.isfile(outfilename):
+            rundata('/epyc/data/ztf_matchfiles' + files[i][1:-1], outdur)
     
 #create a csv for each match file
 #4:05 - 4:24
