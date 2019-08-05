@@ -1,7 +1,0 @@
-,match_file,id,type,mintime,maxtime,ra,dec,equivdur,plot_name,labels
-0,ztf_000436_zr_c14_q3_match_programid2.pytable,67941,sources,58348.2310532,58348.2328819,284.4477708,-0.2972978,191.75875162821347,found_flares_436/ztf_000436_zr_c14_q3_match_programid2_id_67941_type_sources.png,3
-1,ztf_000436_zr_c14_q3_match_programid2.pytable,124717,sources,58347.282604199994,58347.2844444,285.1823402,0.1058378,-123.03110070913964,found_flares_436/ztf_000436_zr_c14_q3_match_programid2_id_124717_type_sources.png,4
-2,ztf_000436_zr_c14_q3_match_programid2.pytable,131153,sources,58347.2830671,58347.2849074,284.8201372,-0.1239076,-292.2588841438888,found_flares_436/ztf_000436_zr_c14_q3_match_programid2_id_131153_type_sources.png,3
-3,ztf_000436_zr_c14_q3_match_programid2.pytable,155870,sources,58347.2311574,58347.2329977,284.4747438,-0.2309485,432.42006794590515,found_flares_436/ztf_000436_zr_c14_q3_match_programid2_id_155870_type_sources.png,4
-4,ztf_000436_zr_c14_q3_match_programid2.pytable,22801,transients,58348.2310532,58348.2328819,285.3089316,-0.0616264,203.8499347929612,found_flares_436/ztf_000436_zr_c14_q3_match_programid2_id_22801_type_transients.png,2
-5,ztf_000436_zr_c14_q3_match_programid2.pytable,123874,transients,58348.221875,58348.223703699994,285.08138199999996,-0.6585028,502.6639188970825,found_flares_436/ztf_000436_zr_c14_q3_match_programid2_id_123874_type_transients.png,4
