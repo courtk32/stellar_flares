@@ -253,7 +253,7 @@ def testlightcurve(lightcurve, ids, file, initout_csv):
         stats = test_model(twomjd, row['fl_indx'])
         writedata(file, initout_csv, ids, twomjd, stats, row, time_until_end, len(cat))
         plot_models(file, twomjd, row['fl_indx'], ids, initout_csv, residuals=True, 
-                    stats=stats, time=time_until_end, full_lc=True, save=True)
+                    stats=stats, time=time_until_end, full_lc=True, save=False)
         
         return
         

@@ -2,7 +2,7 @@ import numpy as np
 import pandas as pd
 
 
-def FINDflare(mag, error, N1=3, N2=1, N3=3,
+def FINDflare(flux, error, sig_i, N1=3, N2=1, N3=3,
               avg_std=False, std_window=7,
               returnbinary=False, debug=False):
     '''
@@ -16,7 +16,7 @@ def FINDflare(mag, error, N1=3, N2=1, N3=3,
 
     Parameters
     ----------
-    mag : numpy array
+    flux : numpy array
         data to search over
     error : numpy array
         errors corresponding to data.
@@ -43,41 +43,43 @@ def FINDflare(mag, error, N1=3, N2=1, N3=3,
         (Not part of original algorithm)
     '''
 
-    med_i = np.nanmedian(mag)
+    med_i = np.nanmedian(flux)
 
     if debug is True:
         print("DEBUG: med_i = " + str(med_i))
+    
+    #.... I took this out to input my own standard deviations
+    #if avg_std is False:        
+    #    sig_i = np.nanstd(flux_for_std) # just the stddev of the window #this was the original 
 
-    if avg_std is False:
-        sig_i = np.nanstd(mag) # just the stddev of the window
-    else:
+    #else:
         # take the average of the rolling stddev in the window.
         # better for windows w/ significant starspots being removed
-        sig_i = np.nanmedian(pd.Series(mag).rolling(std_window, center=True).std())
+   #    sig_i = np.nanmedian(pd.Series(flux).rolling(std_window, center=True).std())
     if debug is True:
         print("DEBUG: sig_i = " + str(sig_i))
 
-    ca = mag - med_i
-    cb = np.abs(mag - med_i) / sig_i
-    cc = np.abs(mag - med_i - error) / sig_i
+    ca = flux - med_i
+    cb = np.abs(flux - med_i) / sig_i
+    cc = np.abs(flux - med_i - error) / sig_i
 
     if debug is True:
         print("DEBUG: ")
-        print(sum(ca<0))
+        print(sum(ca>0))
         print(sum(cb>N1))
         print(sum(cc>N2))
 
     # pass cuts from Eqns 3a,b,c
-    ctmp = np.where((ca < 0) & (cb > N1) & (cc > N2))
+    ctmp = np.where((ca > 0) & (cb > N1) & (cc > N2))
 
-    cindx = np.zeros_like(mag)
+    cindx = np.zeros_like(flux)
     cindx[ctmp] = 1
 
     # Need to find cumulative number of points that pass "ctmp"
     # Count in reverse!
-    ConM = np.zeros_like(mag)
+    ConM = np.zeros_like(flux)
     # this requires a full pass thru the data -> bottleneck
-    for k in range(2, len(mag)):
+    for k in range(2, len(flux)):
         ConM[-k] = cindx[-k] * (ConM[-(k-1)] + cindx[-k])
 
     # these only defined between dl[i] and dr[i]
@@ -94,7 +96,7 @@ def FINDflare(mag, error, N1=3, N2=1, N3=3,
     if returnbinary is False:
         return np.array([istart_i, istop_i])
     else:
-        bin_out = np.zeros_like(mag, dtype=np.int)
+        bin_out = np.zeros_like(flux, dtype=np.int)
         for k in range(len(istart_i)):
             bin_out[istart_i[k]:istop_i[k]+1] = 1
         return bin_out

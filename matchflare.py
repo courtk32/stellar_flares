@@ -21,19 +21,19 @@ sns.set_context("talk")
 def loaddata(matchfile):
     mtfl = pt.open_file(matchfile, 'r', root_uep='/', filters='lzo')
     sourcedata = pd.read_hdf(matchfile, key="matches/sourcedata")
-    transientdata = pd.read_hdf(matchfile, key="matches/transientdata")
+    #transientdata = pd.read_hdf(matchfile, key="matches/transientdata")
     sourcesObject = mtfl.get_node("/matches", "sources")
-    transientsObject = mtfl.get_node("/matches", "transients")
+    #transientsObject = mtfl.get_node("/matches", "transients")
     sources_columns = pd.DataFrame.from_records(sourcesObject.read(0,0))
     sources_columns_list = sources_columns.columns.tolist()
     sources = pd.DataFrame.from_records(sourcesObject.cols, columns=sources_columns_list)
-    transients_columns = pd.DataFrame.from_records(transientsObject.read(0,0))
-    transients_columns_list = transients_columns.columns.tolist()
-    transients = pd.DataFrame.from_records(transientsObject.cols, columns=transients_columns_list)
+    #transients_columns = pd.DataFrame.from_records(transientsObject.read(0,0))
+    #transients_columns_list = transients_columns.columns.tolist()
+    #transients = pd.DataFrame.from_records(transientsObject.cols, columns=transients_columns_list)
     sourcedata.sort_values('mjd', inplace=True)
-    transientdata.sort_values('mjd', inplace=True)
+    #transientdata.sort_values('mjd', inplace=True)
     mtfl.close()
-    return sources, sourcedata, transients, transientdata
+    return sources, sourcedata#, transients, transientdata
 
 
 def plotflare(file, outdur, idf, lightcurve, typecurve, indx, show=True):
@@ -76,7 +76,7 @@ def plotflare(file, outdur, idf, lightcurve, typecurve, indx, show=True):
         plt.close()
 
 
-def EquivDur(time, flux):
+def EquivDur(time, flux, flux_error):
     '''
     Compute the Equivalent Duration of an event. This is simply the area
     under the flare, in relative flux units.
@@ -84,10 +84,67 @@ def EquivDur(time, flux):
         pass the flare!
     Flux must be array in units of zero-centered RELATIVE FLUX
     Time must be array in units of DAYS
+    Fluxerror must be array in units RELATIVE FLUX
     Output has units of SECONDS
+    
+    note: error comes from the Spenser's code
     '''
-    p = np.trapz(flux, x=(time * 60.0 * 60.0 * 24.0))
-    return p
+    dtime = np.diff(time)
+
+    ED = np.trapz(flux, x=(time * 60.0 * 60.0 * 24.0))
+    ED_err = np.sqrt(np.sum((dtime*flux_error[:-1])**2))
+
+    return ED, ED_err
+
+
+def measureED(x, y, yerr, tpeak, fwhm, num_fwhm=10):
+    '''
+    Measure the equivalent duration of a flare in a smoothed light
+    curve. FINDflare typically doesnt identify the entire flare, so
+    integrate num_fwhm/2*fwhm away from the peak. As long as the light 
+    curve is flat away from the flare, the region around the flare should
+    not significantly contribute.
+    Parameters
+    ----------
+    x : numpy array
+        time values from the entire light curve
+    y : numpy array
+        flux values from the entire light curve
+    yerr : numpy array
+        error in the flux values
+    tpeak : float
+        Peak time of the flare detection
+    fwhm : float
+        Full-width half maximum of the flare
+    num_fwhm : float, optional
+        Size of the integration window in units of fwhm
+    Returns
+    -------
+        ED - Equivalent duration of the flare
+        ED_err - The uncertainty in the equivalent duration
+    '''
+
+    try:
+        # I will only give the 
+        #width = fwhm*num_fwhm
+        istart = np.argwhere(x > tpeak - fwhm * 1)[0]
+        ipeak = np.argwhere(x > tpeak)[0]
+        istop = np.argwhere(x > tpeak + fwhm * 5)[0]
+    
+        dx = np.diff(x)
+        x = x[:-1]
+        y = y[:-1]
+        yerr = yerr[:-1]
+        mask = (x > x[istart]) & (x < x[istop])
+        ED = np.trapz(y[mask], x[mask])
+        ED_err = np.sqrt(np.sum((dx[mask]*yerr[mask])**2))
+
+    except IndexError:
+        return -1, -1
+    
+    return ED, ED_err
+
+
 
 
 def writedata(file, outdur, idf, lightcurve, typecurve, nflare, equivdur):
@@ -128,8 +185,8 @@ def findflare(file, outdur, idf, lightcurve, typecurve, N1=3, N2=1, N3=3):
     edges = np.concatenate([[0], bpoint, [len(lightcurve)]])
     indx = np.array([], dtype=np.int)
     for j in range(len(edges) - 1):
-        flare = ff(lightcurve['mag'][edges[j]:edges[j+1]],
-                   lightcurve['magerr'].values[edges[j]:edges[j+1]],
+        flare = ff(lightcurve['psfflux'][edges[j]:edges[j+1]],
+                   lightcurve['psffluxerr'].values[edges[j]:edges[j+1]],
                    N1=N1, N2=N2, N3=N3)
         for i in range(len(flare[0, :])):
             nflare = np.arange(edges[j] + flare[0, i],
@@ -143,25 +200,25 @@ def findflare(file, outdur, idf, lightcurve, typecurve, N1=3, N2=1, N3=3):
                              np.nanmedian(lightcurve['psfflux']) - 1)
 #                write must come first because it creates the directory
                 writedata(file, outdur, idf, lightcurve, typecurve, nflare, p)
-                plotflare(file, outdur, idf, lightcurve, typecurve, nflare, show=False)
+                #plotflare(file, outdur, idf, lightcurve, typecurve, nflare, show=False)
                 indx = np.append(indx, nflare)            
             
 def rundata(matchfile, outdur):
-    sources, sourcedata, transients, transientdata = loaddata(matchfile)
+    sources, sourcedata = loaddata(matchfile)
     ids = sources.loc[(sources["bestmedianmag"] <= 21.5) &
                       (sources["bestmedianmag"] > 0) &
                       (sources["nobs"] > 100), "matchid"]  
-    idt = transients.loc[(transients["bestmedianmag"] <= 21.5) & 
-                         (transients["bestmedianmag"] > 0) &
-                         (transients["nobs"] > 100), "matchid"]
+    #idt = transients.loc[(transients["bestmedianmag"] <= 21.5) & 
+    #                     (transients["bestmedianmag"] > 0) &
+    #                     (transients["nobs"] > 100), "matchid"]
     for i in ids:
         s = sourcedata[sourcedata["matchid"] == i]
         findflare(matchfile, outdur, i, s, "sources")
 #    s = sourcedata[sourcedata["matchid"] == 21400]
 #    findflare(matchfile, outdur, 21400, s, 'sources')
-    for i in idt:
-        t = transientdata[transientdata["matchid"] == i]
-        findflare(matchfile, outdur, i, t, "transients")
+    #for i in idt:
+    #    t = transientdata[transientdata["matchid"] == i]
+    #    findflare(matchfile, outdur, i, t, "transients")
 
 
     
